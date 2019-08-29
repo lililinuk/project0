@@ -1,0 +1,17 @@
+from finlab.crawler import (
+    widget, 
+    
+    crawl_price, 
+    crawl_monthly_report, 
+    crawl_finance_statement_by_date,
+    
+    date_range, month_range, season_range
+)
+
+import sqlite3
+import os
+conn = sqlite3.connect(os.path.join('data', "data.db"))
+
+widget(conn, 'price', crawl_price, date_range)
+widget(conn, 'monthly_revenue', crawl_monthly_report, month_range)
+widget(conn, 'finance_statement', crawl_finance_statement_by_date, season_range)
