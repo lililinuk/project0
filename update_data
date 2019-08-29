@@ -1,5 +1,6 @@
 import datetime
 from finlab.crawler import update_table
+#這裡會用到crawler這個FUNCTION , 解壓縮FINLAB.ZIP到檔案夾
 update_table(conn, 'price', crawl_price, [datetime.date(2018,3,26)])
 update_table(conn, 'monthly_revenue', crawl_monthly_report, [datetime.date(2018,3,1)])
 update_table(conn, 'finance_statement', crawl_finance_statement_by_date, [datetime.date(2018,3,31)])
