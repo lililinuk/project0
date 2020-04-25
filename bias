@@ -1,0 +1,31 @@
+import numpy as np
+import pandas as pd
+
+def strategy (m1 , m2 ,m3 , m4 , draw_plot = False):
+
+   sma = twii.rolling(m1).mean()
+   bias = twii / sma
+   ub = bias.rolling(m2).mean() + bias.rolling(m2).std()*m3
+   lb = bias.rolling(m2).mean() - bias.rolling(m2).std()*m4
+   buy = bias > ub
+   sell = bias < lb
+   hold = pd.Series(np.nan, index = twii.index)
+   hold[buy] = 1
+   hold[sell] = 0
+   hold = hold.ffill()
+   ret = twii.shift(-2) - twii.shift(-1)
+   ret[hold == 0] = 0
+   ret -= hold.diff().abs()*3
+   cret = ret.cumsum()
+   plt.plot(cret)
+
+   return cret.iloc[-1]
+   
+   
+vmax=0
+for m1 in range ( 300, 3000, 200):
+  for m2 in range ( 500, 800, 10):
+    v = strategy(m1,m2,1,1)
+    if v > vmax :
+        vmax = v
+        print(vmax,m1,m2,1,1) 
