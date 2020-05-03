@@ -1,0 +1,48 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from finlab.data import Data
+
+data = Data()
+signal = data.talib('CDLKICKING')
+close = data.get_adj('收盤價')
+open_ = data.get_adj('開盤價')
+
+etf_list = close.columns[:10]
+close= close[etf_list]
+open_ = open_[etf_list]
+signal[etf_list]
+
+buy = (signal> 0)
+sell = close < close.rolling(20).mean()
+
+hold = pd.DataFrame(np.nan, index = close.index, columns = etf_list)
+hold[buy] =1
+hold[sell]= 0
+hold = hold.ffill()
+hold = hold.fillna(0)
+hold = hold.shift()
+
+ret = open_.shift(-1) / open_
+ret  = ret.fillna(1)
+ret[hold != 1] = np.nan
+timeperiod_id = (hold.diff().abs().sum(axis=1 )> 0 ).astype(int).cumsum()
+ret_rebalanced = ret.groupby(timeperiod_id).prod()
+ret_rebalanced.index = timeperiod_id [timeperiod_id.diff()!=0].index
+hold_rebalanced = hold[timeperiod_id.diff()!=0]
+
+tax= hold_rebalanced.fillna(0).diff()
+tax[ tax > 0]*= (1.425/1000)
+tax[ tax < 0]*= -(1.425/100 + 3/1000)
+tax  = tax.sum(axis=1) 
+
+ret_stocks = ret_rebalanced[hold_rebalanced == 1 ].mean(axis = 1).fillna(1)
+ret_tax = ( 1- tax)
+ret_total = ( ret_stocks * ret_tax).cumprod()
+
+
+fig1 = plt.figure()
+plt.plot(hold)
+fig2 = plt.figure()
+plt.plot(ret_total)
+plt.show()
