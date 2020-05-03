@@ -1,0 +1,65 @@
+
+#set up parameters
+
+open_adj = data.get_adj('開盤價')
+ret1 = open_adj.shift(-2) / open_adj.shift(-1)
+ret5 = open_adj.shift(-6) / open_adj.shift(-1)
+ret10 = open_adj.shift(-11) / open_adj.shift(-1)
+ret23 = open_adj.shift(-24) / open_adj.shift(-1)
+ret60 = open_adj.shift(-61) / open_adj.shift(-1)
+
+ret1 = ret1.unstack()
+ret5 = ret5.unstack()
+ret10 = ret10.unstack()
+ret23 = ret23.unstack()
+ret60 = ret60.unstack()
+
+# get candle stick returns
+summary = {}
+
+import talib
+for fname in dir(talib):
+    if fname[:3] != 'CDL':
+        continue
+    df = data.talib(fname)
+    df = df.unstack()
+    ret_fall1 = ret1[df<0]
+    ret_rise1 = ret1[df>0]
+    
+    ret_fall5 = ret5[df<0]
+    ret_rise5 = ret5[df>0]
+    
+    ret_fall10 = ret10[df<0]
+    ret_rise10 = ret10[df>0]
+    
+    ret_fall23 = ret23[df<0]
+    ret_rise23 = ret23[df>0]
+    
+    ret_fall60 = ret60[df<0]
+    ret_rise60 = ret60[df>0]
+    
+    summary[ 'POS' + fname] = {
+        'ret1' : ret_rise1.mean(),
+        'ret5' : ret_rise5.mean(),
+        'ret10' : ret_rise10.mean(),
+        'ret23' : ret_rise23.mean(),
+        'ret60' : ret_rise60.mean(),
+    }
+    summary[ 'NEG' + fname] = {
+        'ret1' : ret_fall1.mean(),
+        'ret5' : ret_fall5.mean(),
+        'ret10' : ret_fall10.mean(),
+        'ret23' : ret_fall23.mean(),
+        'ret60' : ret_fall60.mean(),
+    }
+
+# plot cld stick return
+
+import pandas as pd
+import matplotlib.pyplot as plt
+plt.style.use("ggplot")
+plt.rcParams['figure.figsize'] = (20,12)
+summary_df = pd.DataFrame(summary).transpose().dropna(how='all')
+summary_df.sort_values('ret23',ascending=False)
+(summary_df-1).sort_values('ret23').plot.bar()
+summary_df.corr()
