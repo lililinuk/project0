@@ -1,0 +1,105 @@
+import finlab.ml as ml
+import matplotlib
+import pandas as pd
+import sklearn.preprocessing as preprocessing
+from sklearn.model_selection import train_test_split
+from sklearn.svm import SVC
+from mlxtend.plotting import plot_decision_regions
+
+
+dataset = ml.fundamental_features()
+features = ['R103_ROE稅後', 'R69B_自由現金流量']
+dataset = dataset[features].dropna(how = 'any')
+
+
+# add quater return in the last column
+
+ml.add_profit_prediction(dataset)
+
+# plot data
+#dataset.plot.scatter(features[0],features[1])
+
+
+#remove outliers
+
+def is_valid(feature,nstd):
+    
+    ub  = feature.mean() + nstd * feature.std()
+    lb  = feature.mean() - nstd * feature.std()
+    
+    return (feature > lb ) &  (feature < ub )
+
+
+valid = is_valid(dataset['R103_ROE稅後'], 2)  & is_valid(dataset['R69B_自由現金流量'],0.1)
+dataset_rmoutliers = dataset[valid].dropna()
+dataset_scaled = pd.DataFrame(preprocessing.scale(dataset_rmoutliers), index=dataset_rmoutliers.index, columns=dataset_rmoutliers.columns)
+dataset_scaled.head()
+
+dataset_scaled['R103_ROE稅後'].hist(bins=100)
+dataset_scaled['R69B_自由現金流量'].hist(bins=100)
+dataset_scaled['return'] = dataset_rmoutliers['return']
+
+
+# split the data into train and test
+dataset_train , dataset_test = train_test_split (dataset_scaled,test_size = 0.1,random_state = 0 )
+
+# build classifier for training
+
+
+cf = SVC(C=1.0,
+    kernel='linear',
+    degree=3,
+    gamma='scale',
+    coef0=0.0,
+    shrinking=True,
+    probability=False,
+    tol=0.001,
+    cache_size=200,
+    class_weight=None,
+    verbose=False,
+    max_iter=-1,
+    decision_function_shape='ovr',
+    break_ties=False,
+    random_state=None,)
+
+# train data
+labels_train = dataset_train['return'] > dataset_train['return'].quantile(0.5)
+labels_test = dataset_test['return'] > dataset_test['return'].quantile(0.5)
+cf.fit(dataset_train[features],labels_train)
+
+
+%matplotlib inline
+
+features_plot = dataset_test[features].values
+lables_plot = labels_test.astype(int).values
+plot_decision_regions(features_plot,lables_plot,clf=cf )
+
+
+#backtesting
+
+history = dataset_test.copy()
+history['svm prediction'] = cf.predict(dataset_test[features])
+
+history = history.reset_index()
+
+dates = sorted(list(set(history['date'])))
+
+seasonal_returns1 = []
+seasonal_returns2 = []
+
+for date in dates :
+    current_stocks = history[history['date']==date]
+    buy_stocks = current_stocks[current_stocks['svm prediction'] == True]
+    sell_stocks = current_stocks[current_stocks['svm prediction'] == False]
+
+    seasonal_return1 = buy_stocks['return'].mean()
+    seasonal_return2 = sell_stocks['return'].mean()
+    
+    seasonal_returns1.append(seasonal_return1)
+    seasonal_returns2.append(seasonal_return2)
+
+
+import matplotlib.pyplot as plt
+plt.style.use('ggplot')
+pd.Series(seasonal_returns1 , index = dates).cumprod().plot(color = 'green')
+pd.Series(seasonal_returns2 , index = dates).cumprod().plot(color = 'red')
