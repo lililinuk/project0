@@ -1,0 +1,149 @@
+from finlab.ml import fundamental_features
+import finlab.ml as ml
+import pandas as pd
+from finlab.data import Data
+import finlab.ml as ml
+dataset = fundamental_features()
+dataset = dataset.rename(columns = {'T3395營業利益' : 'T3395',
+ 'T7210營運現金流': 'T7210',
+ 'T3950歸屬母公司淨利' :'T3950',
+ 'T7211折舊':'T7211',
+ 'T0100流動資產':'T0100',
+ 'T1100流動負債':'T1100',
+ 'T7324取得不動產廠房及設備':'T7324',
+ 'T3970經常稅後淨利':'T3970',
+ 'R101_ROA稅後息前':'R101_ROA',
+ 'R11V_ROA綜合損益':'R11V_ROA',
+ 'R103_ROE稅後':'R103_ROE',
+ 'R11U_ROE綜合損益':'R11U_ROE',
+ 'R145_稅前息前折舊前淨利率':'R145',
+ 'R105_營業毛利率':'R105',
+ 'R106_營業利益率':'R106',
+ 'R107_稅前淨利率':'R107',
+ 'R108_稅後淨利率':'R108',
+ 'R112_業外收支營收率':'R112',
+ 'R179_貝里比率':'R179',
+ 'R203_研究發展費用率':'R203',
+ 'R205_現金流量比率':'R205',
+ 'R207_稅率':'R207',
+ 'R304_每股營業額':'R304',
+ 'R305_每股營業利益':'R305',
+ 'R303_每股現金流量':'R303',
+ 'R306_每股稅前淨利':'R306',
+ 'R314_每股綜合損益':'R314',
+ 'R315_每股稅前淨利':'R315',
+ 'R316_每股稅後淨利':'R316',
+ 'R504_總負債除總淨值':'R504',
+ 'R505_負債比率':'R505',
+ 'R506_淨值除資產':'R506',
+ 'R401_營收成長率':'R401',
+ 'R402_營業毛利成長率':'R402',
+ 'R403_營業利益成長率':'R403',
+ 'R404_稅前淨利成長率':'R404',
+ 'R405_稅後淨利成長率':'R405',
+ 'R406_經常利益成長率':'R406',
+ 'R408_資產總額成長率':'R408',
+ 'R409_淨值成長率':'R409',
+ 'R501_流動比率':'R501',
+ 'R502_速動比率':'R502',
+ 'R503_利息支出率':'R503',
+ 'R678_營運資金':'R678',
+ 'R607_總資產週轉次數':'R607',
+ 'R610_存貨週轉率':'R610',
+ 'R612_固定資產週轉次數':'R612',
+ 'R613_淨值週轉率次':'R613',
+ 'R69B_自由現金流量':'R69B',})
+
+dataset = dataset.dropna(thresh=int(len(dataset)*0.5), axis=1).dropna(how='any')
+feature_names = list(dataset.columns)
+ml.add_profit_prediction(dataset)
+dataset = dataset.dropna()
+select = dataset.index.get_level_values('date') < '2017'
+dataset_train = dataset[select]
+dataset_test = dataset[~select]
+
+train = dataset_train[feature_names] , dataset_train['return'] > 1 
+test = dataset_test[feature_names] , dataset_test['return'] > 1 
+
+# This code is maximised by  大神
+import lightgbm
+
+fit_params={"early_stopping_rounds":30, 
+            "eval_metric" : 'auc', 
+            "eval_set" : [test],
+            'eval_names': ['valid'],
+            'verbose': 100,
+            'categorical_feature': 'auto'}
+
+from scipy.stats import randint as sp_randint
+from scipy.stats import uniform as sp_uniform
+
+param_test ={'num_leaves': sp_randint(6, 50), 
+             'min_child_samples': sp_randint(100, 500), 
+             'min_child_weight': [1e-5, 1e-3, 1e-2, 1e-1, 1, 1e1, 1e2, 1e3, 1e4],
+             'subsample': sp_uniform(loc=0.2, scale=0.8), 
+             'colsample_bytree': sp_uniform(loc=0.4, scale=0.6),
+             'reg_alpha': [0, 1e-1, 1, 2, 5, 7, 10, 50, 100],
+             'reg_lambda': [0, 1e-1, 1, 5, 10, 20, 50, 100]}
+
+n_HP_points_to_test = 100
+
+import lightgbm as lgb
+from sklearn.model_selection import RandomizedSearchCV, GridSearchCV
+
+#n_estimators is set to a "large value". The actual number of trees build will depend on early stopping and 5000 define only the absolute maximum
+clf = lgb.LGBMClassifier(max_depth=-1, random_state=314, silent=True, metric='None', n_jobs=4, n_estimators=5000)
+gs = RandomizedSearchCV(
+    estimator=clf, param_distributions=param_test, 
+    n_iter=n_HP_points_to_test,
+    scoring='roc_auc',
+    cv=3,
+    refit=True,
+    random_state=314,
+    verbose=True)
+
+gs.fit(*train, **fit_params)
+
+
+# get the best model
+gs.best_estimator_
+
+# feed lgbm classifier with the best parameters 
+cf_lgbm = lightgbm.LGBMClassifier(boosting_type='gbdt', class_weight=None,
+               colsample_bytree=0.8754369812451743, importance_type='split',
+               learning_rate=0.1, max_depth=-1, metric='None',
+               min_child_samples=372, min_child_weight=10.0, min_split_gain=0.0,
+               n_estimators=5000, n_jobs=4, num_leaves=44, objective=None,
+               random_state=314, reg_alpha=1, reg_lambda=0, silent=True,
+               subsample=0.568664015245299, subsample_for_bin=200000,
+               subsample_freq=0)
+
+cf_lgbm.fit(*train , **fit_params)
+cf_lgbm.score(*train)
+prediction = cf_lgbm.predict(dataset_test[feature_names])
+returns = dataset_test['return'][prediction > 0.5]
+dates = returns.index.get_level_values("date")
+returns.groupby(dates).mean().cumprod().plot(color='red')
+
+returns = dataset_test['return'][prediction < 0.5]
+dates = returns.index.get_level_values("date")
+returns.groupby(dates).mean().cumprod().plot(color='blue')
+
+# backtesting using feature importance
+importance = pd.Series(cf_lgbm.feature_importances_, index=feature_names).sort_values(ascending=False)
+data = Data()
+close = data.get('收盤價')
+SMA = close.rolling(60,min_periods = 10).mean()
+bias = close / SMA 
+ml.add_feature(dataset,'bias',bias)
+items = list(importance.index[:30])
+def select_stock(df) :
+    rank = df[items].rank(pct=True).sum(axis = 1)
+    condition1 = rank.rank(pct = True) > 0.9
+    condition2 = df['bias'] > 1
+    return df[condition1 & condition2]['return'].mean()
+
+
+dates = dataset.index.get_level_values('date')
+dataset.groupby(dates).apply(select_stock).cumprod().plot()
+dataset['return'].groupby(dates).mean().cumprod().plot()
